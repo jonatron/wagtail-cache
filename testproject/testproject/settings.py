@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
+from django.utils.translation import ugettext_lazy as _
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE_DIR = os.path.dirname(PROJECT_DIR)
@@ -114,6 +115,10 @@ USE_I18N = True
 USE_L10N = True
 
 USE_TZ = True
+
+LANGUAGES = WAGTAIL_CONTENT_LANGUAGES = [
+    ('en-us', _("English (United States)")),
+]
 
 
 # Static files (CSS, JavaScript, Images)
