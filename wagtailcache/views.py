@@ -2,9 +2,6 @@
 Views for the wagtail admin dashboard.
 """
 
-from typing import Dict
-from typing import List
-
 from django.core.cache import caches
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
@@ -20,12 +17,24 @@ def index(request):
     """
     # Get the keyring to show cache contents.
     _wagcache = caches[wagtailcache_settings.WAGTAIL_CACHE_BACKEND]
-    keyring: Dict[str, List[str]] = _wagcache.get("keyring", {})
+
+    # needs to be redis
+    # pip install redis
+    # docker run -p 6379:6379 redis
+
+    paths = []
+    scan_key = _wagcache.make_and_validate_key("WCPth*")
+    prefix = _wagcache.make_and_validate_key("")
+    prefix_len = len(prefix) + len("WCPth")
+    # todo add a limit
+    for key in _wagcache._cache.get_client().scan_iter(scan_key):
+        paths.append(key[prefix_len:].decode("ascii"))
+
     return render(
         request,
         "wagtailcache/index.html",
         {
-            "keyring": keyring,
+            "paths": paths,
         },
     )
 

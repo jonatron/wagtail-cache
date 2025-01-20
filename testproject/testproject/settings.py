@@ -127,8 +127,10 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        # "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "TIMEOUT": 90061,  # 1 day, 1 hour, 1 minute, 1 second.
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379",
     },
     "one_second": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

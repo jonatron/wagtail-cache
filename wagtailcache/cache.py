@@ -337,23 +337,27 @@ class UpdateCacheMiddleware(MiddlewareMixin):
                 # (of the chopped request, not the real one).
                 cr = _chop_querystring(request)
                 uri = unquote(cr.build_absolute_uri())
-                keyring = self._wagcache.get("keyring", {})
-                # Get current cache keys belonging to this URI.
-                # This should be a list of keys.
-                uri_keys: List[str] = keyring.get(uri, [])
-                # Append the key to this list if not already present and save.
-                if cache_key not in uri_keys:
-                    uri_keys.append(cache_key)
-                    keyring[uri] = uri_keys
-                    self._wagcache.set("keyring", keyring)
+
+                # memcached key limit 250
+                path_key = f"WCPth{request.path}"[:250]
+                cache_keys_at_path = self._wagcache.get(path_key, [])
+                if request.path not in cache_keys_at_path:
+                    cache_keys_at_path.append(cache_key)
+
                 if isinstance(response, SimpleTemplateResponse):
 
                     def callback(r):
-                        self._wagcache.set(cache_key, r, timeout)
+                        self._wagcache.set_many({
+                            cache_key: r,
+                            path_key: cache_keys_at_path
+                        }, timeout)
 
                     response.add_post_render_callback(callback)
                 else:
-                    self._wagcache.set(cache_key, response, timeout)
+                    self._wagcache.set_many({
+                        cache_key: response,
+                        path_key: cache_keys_at_path
+                    }, timeout)
                 # Add a response header to indicate this was a cache miss.
                 _patch_header(response, Status.MISS)
             except Exception:
@@ -376,23 +380,28 @@ def clear_cache(urls: List[str] = []) -> None:
         return
 
     _wagcache = caches[wagtailcache_settings.WAGTAIL_CACHE_BACKEND]
-    if urls and "keyring" in _wagcache:
-        keyring = _wagcache.get("keyring")
+    if urls:
+
+        paths_to_key = {}
+        scan_key = _wagcache.make_and_validate_key("WCPth*")
+        prefix = _wagcache.make_and_validate_key("")
+        total_prefix_len = len(prefix) + len("WCPth")
+        for key in _wagcache._cache.get_client().scan_iter(scan_key):
+            key = key.decode("ascii")
+            path = key[total_prefix_len:]
+            paths_to_key[path] = key
+
         # Check the provided URL matches a key in our keyring.
-        matched_urls = []
+        matched_keys = []
         for regex in urls:
-            for key in keyring:
-                if re.match(regex, key):
-                    matched_urls.append(key)
-        # If it matches, delete each entry from the cache,
-        # and delete the URL from the keyring.
-        for url in matched_urls:
-            entries = keyring.get(url, [])
-            for cache_key in entries:
-                _wagcache.delete(cache_key)
-            del keyring[url]
-        # Save the keyring.
-        _wagcache.set("keyring", keyring)
+            for path, key in paths_to_key.items():
+                if re.match(regex, path):
+                    matched_keys.append(key)
+        # If it matches, delete each entry from the cache
+        for key in matched_keys:
+            keys = _wagcache.get(key[len(prefix):], [])
+            _wagcache.delete(key[len(prefix):])
+            _wagcache.delete_many(keys)
     # Clears the entire cache backend used by wagtail-cache.
     else:
         _wagcache.clear()
